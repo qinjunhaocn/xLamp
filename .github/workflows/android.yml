@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-debug-apk:
@@ -29,9 +29,6 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Flutter version
-        run: flutter --version
-
       - name: Install dependencies
         run: flutter pub get
 
@@ -44,9 +41,12 @@ jobs:
       - name: Show APK
         run: ls -lh build/app/outputs/flutter-apk/
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+      - name: Publish release with APK
+        uses: softprops/action-gh-release@v2
         with:
-          name: xlamp-debug-apk
-          path: build/app/outputs/flutter-apk/app-debug.apk
-          if-no-files-found: error
+          tag_name: build-${{ github.run_number }}
+          name: xLamp build ${{ github.run_number }}
+          body: |
+            自动构建的 debug APK（run ${{ github.run_number }}，commit ${{ github.sha }}）。
+          files: build/app/outputs/flutter-apk/app-debug.apk
+          fail_on_unmatched_files: true
