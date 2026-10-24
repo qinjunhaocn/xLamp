@@ -56,3 +56,7 @@ app.*.map.json
 
 # 本地构建产物
 /artifacts/
+
+# 签名文件禁止入库
+*.jks
+*.keystore
