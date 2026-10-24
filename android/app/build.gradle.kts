@@ -1,4 +1,6 @@
 
+import java.io.File
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -6,9 +8,9 @@ plugins {
 }
 
 // 通过环境变量注入 release 签名信息（GitHub Actions secrets → env）。
-val keystorePath: String = System.getenv("XLAMP_KEYSTORE") ?: ""
-val keystoreFile = file(keystorePath)
-val hasReleaseKeystore = keystorePath.isNotEmpty() && keystoreFile.exists()
+val keystorePath: String = System.getenv("XLAMP_KEYSTORE").orEmpty()
+val keystoreFile: File? = if (keystorePath.isNotBlank()) file(keystorePath) else null
+val hasReleaseKeystore = keystoreFile?.exists() == true
 
 android {
     namespace = "com.voxyn.xlamp"
