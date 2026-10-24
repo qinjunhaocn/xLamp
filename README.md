@@ -326,6 +326,15 @@ xLamp 已按原 App 算法把 100% 映射到通道 `255`。若仍偏暗，通常
 - 请勿将签名密钥库（`.jks`）或密码提交到仓库。
 - 非商业使用授权见 [LICENSE](LICENSE)；商业用途需获得作者书面许可。
 
+## 🙌 贡献者
+
+| 贡献者 | 贡献 |
+|---|---|
+| **Voxyn** · [@qinjunhaocn](https://github.com/qinjunhaocn) | 项目发起、协议逆向、测试反馈 |
+| **xLamp Agent** · DeepSeek Harness | 协议移植与验证、应用实现、UI 与 CI |
+
+完整名单与参与方式见 [CONTRIBUTORS.md](CONTRIBUTORS.md)。
+
 ## 🙏 致谢
 
 - [Flutter](https://flutter.dev) / [Material 3](https://m3.material.io)
