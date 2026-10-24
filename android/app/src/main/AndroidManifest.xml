@@ -6,7 +6,7 @@
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
 
     <application
-        android:label="xlamp"
+        android:label="xLamp"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
