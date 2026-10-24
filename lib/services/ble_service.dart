@@ -29,6 +29,13 @@ class BleService {
     }
   }
 
+  Future<bool> hasPermissions() async {
+    final PermissionStatus advertise = await Permission.bluetoothAdvertise.status;
+    final PermissionStatus connect = await Permission.bluetoothConnect.status;
+    return (advertise.isGranted || advertise.isLimited) &&
+        (connect.isGranted || connect.isLimited);
+  }
+
   /// 申请 Android 12+ 的蓝牙广播/连接运行时权限。
   Future<bool> ensurePermissions() async {
     final Map<Permission, PermissionStatus> statuses =

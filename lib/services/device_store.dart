@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/lamp_device.dart';
@@ -12,6 +13,8 @@ class DeviceStore {
   static const String _kDuration = 'xlamp.duration';
   static const String _kRepeats = 'xlamp.repeats';
   static const String _kInterval = 'xlamp.interval';
+  static const String _kTheme = 'xlamp.themeMode';
+  static const String _kMonet = 'xlamp.monet';
 
   Future<SharedPreferences> get _sp => SharedPreferences.getInstance();
 
@@ -79,5 +82,32 @@ class DeviceStore {
   Future<void> saveInterval(int value) async {
     final SharedPreferences sp = await _sp;
     await sp.setInt(_kInterval, value);
+  }
+
+  Future<ThemeMode> loadThemeMode() async {
+    final SharedPreferences sp = await _sp;
+    switch (sp.getInt(_kTheme)) {
+      case 1:
+        return ThemeMode.light;
+      case 2:
+        return ThemeMode.dark;
+      default:
+        return ThemeMode.system;
+    }
+  }
+
+  Future<void> saveThemeMode(ThemeMode mode) async {
+    final SharedPreferences sp = await _sp;
+    await sp.setInt(_kTheme, mode.index);
+  }
+
+  Future<bool> loadMonet() async {
+    final SharedPreferences sp = await _sp;
+    return sp.getBool(_kMonet) ?? true;
+  }
+
+  Future<void> saveMonet(bool value) async {
+    final SharedPreferences sp = await _sp;
+    await sp.setBool(_kMonet, value);
   }
 }
