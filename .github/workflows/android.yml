@@ -12,11 +12,6 @@ jobs:
   build-release-apk:
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    env:
-      XLAMP_KEYSTORE: ${{ github.workspace }}/android/app/voxyn-release.jks
-      XLAMP_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-      XLAMP_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-      XLAMP_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -49,8 +44,8 @@ jobs:
             echo "::error::缺少 KEYSTORE_BASE64 secret"
             exit 1
           fi
-          echo "$KEYSTORE_BASE64" | base64 --decode > "$XLAMP_KEYSTORE"
-          ls -l "$XLAMP_KEYSTORE"
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/voxyn-release.jks"
+          ls -l "$RUNNER_TEMP/voxyn-release.jks"
 
       - name: Install dependencies
         run: flutter pub get
@@ -61,19 +56,37 @@ jobs:
       - name: Test
         run: flutter test
 
-      - name: Build release APK
+      - name: Build unsigned release APK
         run: flutter build apk --release
 
-      - name: Verify signature (v1 + v2 + v3)
+      - name: Sign with v1 + v2 + v3
+        env:
+          XLAMP_KEYSTORE: ${{ runner.temp }}/voxyn-release.jks
+          XLAMP_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          XLAMP_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          XLAMP_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          APK=build/app/outputs/flutter-apk/app-release.apk
           APKSIGNER=$(ls -1 "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
           echo "using $APKSIGNER"
-          "$APKSIGNER" verify --verbose --print-certs "$APK" | tee /tmp/verify.txt
+          UNSIGNED=android/app/build/outputs/apk/release/app-release-unsigned.apk
+          OUT=build/app/outputs/flutter-apk/xLamp-release.apk
+          test -f "$UNSIGNED"
+          "$APKSIGNER" sign \
+            --ks "$XLAMP_KEYSTORE" \
+            --ks-key-alias "$XLAMP_KEY_ALIAS" \
+            --ks-pass env:XLAMP_STORE_PASSWORD \
+            --key-pass env:XLAMP_KEY_PASSWORD \
+            --v1-signing-enabled true \
+            --v2-signing-enabled true \
+            --v3-signing-enabled true \
+            --min-sdk-version 24 \
+            --out "$OUT" \
+            "$UNSIGNED"
+          "$APKSIGNER" verify --verbose --print-certs "$OUT" | tee /tmp/verify.txt
           grep -q "Verified using v1 scheme (JAR signing): true" /tmp/verify.txt
           grep -q "Verified using v2 scheme (APK Signature Scheme v2): true" /tmp/verify.txt
           grep -q "Verified using v3 scheme (APK Signature Scheme v3): true" /tmp/verify.txt
-          echo "签名方案校验通过"
+          echo "签名方案校验通过（v1 / v2 / v3）"
 
       - name: Show APK
         run: ls -lh build/app/outputs/flutter-apk/
@@ -89,5 +102,5 @@ jobs:
             - version: `v${{ steps.ver.outputs.version }}`
             - commit: `${{ github.sha }}`
             - workflow run: #${{ github.run_number }}
-          files: build/app/outputs/flutter-apk/app-release.apk
+          files: build/app/outputs/flutter-apk/xLamp-release.apk
           fail_on_unmatched_files: true

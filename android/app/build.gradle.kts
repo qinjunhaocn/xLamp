@@ -45,8 +45,8 @@ android {
 
     buildTypes {
         release {
+            // CI 里先构建未签名 APK，再用 apksigner 统一做 v1+v2+v3 签名。
             signingConfig = signingConfigs.findByName("release")
-                ?: signingConfigs.getByName("debug")
             isMinifyEnabled = false
             isShrinkResources = false
         }
