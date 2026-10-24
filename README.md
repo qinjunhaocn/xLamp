@@ -5,17 +5,27 @@ xLamp 是一个 Android 端的 BLE 灯具控制客户端，基于对 **LampSmart
 13 个 16-bit Service UUID 并通过 BLE 广播发送。
 
 - 包名：`com.voxyn.xlamp`
-- UI：Flutter + [flutter_miuix](https://github.com/ChuxinNeko/flutter_miuix)（HyperOS/MIUI 风格）
-- 仅 Android
+- UI：Material Design 3，支持 Android 12+ **莫奈取色**（Monet / 动态取色）
+- 仅 Android（minSdk 24）
+
+## 使用流程
+
+1. 首次打开时授予「附近的设备」权限（Android 12+）。
+2. 点击「添加设备」，起个名字、选择类型，保存。
+3. 给灯具断电再上电，在 **5 秒内**点击「我已上电，开始配对」。
+4. 灯闪烁或蜂鸣即配对成功，之后即可开关、调亮度/色温/颜色、切换场景。
+
+不需要手动填写任何协议参数；地址与通道会在添加设备时自动分配，只有排查问题时才需要
+打开「高级参数」。
 
 ## 功能
 
-- 设备管理：灯具 / 风扇 / 换气 / 浴霸，独立地址与通道
-- 配对 / 解绑（对应 `blevbBinding` 的 `0x28` / `0x45`）
-- 开关、亮度、色温、RGB、场景、夜灯
+- 设备管理：灯具 / 风扇 / 换气 / 浴霸
+- 一键配对 / 解绑（对应 `blevbBinding` 的 `0x28` / `0x45`）
+- 开关、亮度、色温、颜色（预设 + HSV 自定义）、场景、夜灯
+- Material 3 + 动态取色，浅色/深色/跟随系统
 - 广播参数可调（时长、重复窗口、间隔）
-- 本机 ID（对应原 App 的 `DEVICE_ADDRESS`）可查看与修改
-- RAW 调试页：手动构造任意 v3 帧并预览 31 字节与 13 个 UUID
+- 开发者工具：手动构造任意 v3 帧并预览
 
 ## 协议实现
 
@@ -43,16 +53,17 @@ xLamp 是一个 Android 端的 BLE 灯具控制客户端，基于对 **LampSmart
 ```bash
 flutter pub get
 flutter analyze
+flutter test
 flutter build apk --debug
 ```
 
 APK 输出：`build/app/outputs/flutter-apk/app-debug.apk`。
 
 仓库自带 GitHub Actions（`.github/workflows/android.yml`），push 到 `main` 或手动
-`workflow_dispatch` 即可产出 `xlamp-debug-apk` artifact。
+`workflow_dispatch` 会构建 APK 并发布到 Release（tag `build-<run_number>`）。
 
 ## 已知边界
 
-- 未连接真实灯具验证；`type`/地址/通道的实际取值需要在设备上确认。
+- 未连接真实灯具验证；`type`/地址/通道的取值若与固件不符，可在「高级参数」中调整。
 - 原 App 还会交替广播一组 Dart 侧辅助 payload；本实现只发送 v3 帧。
 - 若灯具之前被原 App 配对过，可能需要先用原 App 解绑，或在本 App 里重新配对。

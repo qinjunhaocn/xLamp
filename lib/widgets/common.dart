@@ -1,41 +1,57 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_miuix/miuix.dart';
 
-/// 带标题的内容卡片。
+/// 圆角内容卡片，带可选标题。
 class SectionCard extends StatelessWidget {
   const SectionCard({
     super.key,
     this.title,
+    this.subtitle,
     this.trailing,
     required this.child,
-    this.padding = const EdgeInsets.all(18),
+    this.padding = const EdgeInsets.fromLTRB(18, 16, 18, 18),
   });
 
   final String? title;
+  final String? subtitle;
   final Widget? trailing;
   final Widget child;
   final EdgeInsets padding;
 
   @override
   Widget build(BuildContext context) {
+    final ColorScheme c = Theme.of(context).colorScheme;
+    final TextTheme t = Theme.of(context).textTheme;
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
-      child: MiuixCard(
-        insideMargin: EdgeInsets.zero,
+      child: Card(
         child: Padding(
           padding: padding,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              if (title != null)
+              if (title != null || trailing != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       Expanded(
-                        child: MiuixText(
-                          title!,
-                          style: MiuixTheme.of(context).textStyles.subtitle,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            if (title != null)
+                              Text(
+                                title!,
+                                style: t.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                              ),
+                            if (subtitle != null) ...<Widget>[
+                              const SizedBox(height: 2),
+                              Text(
+                                subtitle!,
+                                style: t.bodySmall?.copyWith(color: c.onSurfaceVariant),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                       ?trailing,
@@ -51,40 +67,9 @@ class SectionCard extends StatelessWidget {
   }
 }
 
-/// 圆角图标底座。
-class IconBadge extends StatelessWidget {
-  const IconBadge({
-    super.key,
-    required this.icon,
-    this.color,
-    this.size = 44,
-    this.iconSize = 22,
-  });
-
-  final IconData icon;
-  final Color? color;
-  final double size;
-  final double iconSize;
-
-  @override
-  Widget build(BuildContext context) {
-    final MiuixColors c = MiuixTheme.of(context).colors;
-    final Color base = color ?? c.primary;
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: base.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(size * 0.42),
-      ),
-      child: MiuixIcon(icon: icon, size: iconSize, tint: base),
-    );
-  }
-}
-
-/// 小型状态标签。
-class StatusChip extends StatelessWidget {
-  const StatusChip({
+/// 状态标签。
+class StatusPill extends StatelessWidget {
+  const StatusPill({
     super.key,
     required this.label,
     required this.color,
@@ -100,20 +85,19 @@ class StatusChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           if (icon != null) ...<Widget>[
-            MiuixIcon(icon: icon!, size: 13, tint: color),
+            Icon(icon, size: 14, color: color),
             const SizedBox(width: 4),
           ],
-          MiuixText(
+          Text(
             label,
-            fontSize: 12,
-            color: color,
+            style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w600),
           ),
         ],
       ),
@@ -121,55 +105,86 @@ class StatusChip extends StatelessWidget {
   }
 }
 
-/// 滑杆行：标题 + 数值 + 滑块。
-class SliderRow extends StatelessWidget {
-  const SliderRow({
-    super.key,
-    required this.title,
-    required this.value,
-    required this.min,
-    required this.max,
-    required this.onChanged,
-    this.onChangeEnd,
-    this.suffix = '',
-  });
+/// 键值行。
+class InfoRow extends StatelessWidget {
+  const InfoRow({super.key, required this.label, required this.value, this.last = false});
 
-  final String title;
-  final double value;
-  final double min;
-  final double max;
-  final ValueChanged<double> onChanged;
-  final ValueChanged<double>? onChangeEnd;
-  final String suffix;
+  final String label;
+  final String value;
+  final bool last;
 
   @override
   Widget build(BuildContext context) {
-    final MiuixTextStyles t = MiuixTheme.of(context).textStyles;
-    final MiuixColors c = MiuixTheme.of(context).colors;
+    final ColorScheme c = Theme.of(context).colorScheme;
+    final TextTheme t = Theme.of(context).textTheme;
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Row(
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: Row(
+            children: <Widget>[
+              Expanded(
+                child: Text(label, style: t.bodyMedium?.copyWith(color: c.onSurfaceVariant)),
+              ),
+              Text(value, style: t.bodyMedium),
+            ],
+          ),
+        ),
+        if (!last) const Divider(height: 1),
+      ],
+    );
+  }
+}
+
+/// 带图标的空状态。
+class EmptyState extends StatelessWidget {
+  const EmptyState({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.message,
+    this.action,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme c = Theme.of(context).colorScheme;
+    final TextTheme t = Theme.of(context).textTheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Expanded(child: MiuixText(title, style: t.body1)),
-            MiuixText(
-              '${value.round()}$suffix',
-              style: t.body2,
-              color: c.onSurfaceVariantSummary,
+            Container(
+              width: 96,
+              height: 96,
+              decoration: BoxDecoration(
+                color: c.primaryContainer,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 44, color: c.onPrimaryContainer),
             ),
+            const SizedBox(height: 20),
+            Text(title, style: t.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: t.bodyMedium?.copyWith(color: c.onSurfaceVariant),
+            ),
+            if (action != null) ...<Widget>[
+              const SizedBox(height: 22),
+              action!,
+            ],
           ],
         ),
-        const SizedBox(height: 2),
-        MiuixSlider(
-          value: value,
-          min: min,
-          max: max,
-          onValueChanged: onChanged,
-          onValueChangeFinished: onChangeEnd == null
-              ? null
-              : () => onChangeEnd!(value),
-        ),
-      ],
+      ),
     );
   }
 }

@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 
 import '../models/lamp_device.dart';
 import '../protocol/lamp_commands.dart';
@@ -6,7 +6,9 @@ import '../protocol/v3_frame.dart';
 import '../services/ble_service.dart';
 import '../services/device_store.dart';
 
-/// 全局状态：设备、广播参数、蓝牙状态。
+import 'dart:typed_data';
+
+/// 全局状态：设备、广播参数、外观与蓝牙权限。
 class AppState extends ChangeNotifier {
   AppState({BleService? ble, DeviceStore? store})
       : _ble = ble ?? BleService(),
@@ -31,22 +33,32 @@ class AppState extends ChangeNotifier {
   String? lastAction;
   Uint8List? lastFrame;
 
+  ThemeMode themeMode = ThemeMode.system;
+  bool monetEnabled = true;
+  bool permissionGranted = false;
+
+  bool get needsPermission => supported && !permissionGranted;
+
   Future<void> init() async {
     phoneId = await _store.loadPhoneId();
     duration = await _store.loadDuration();
     repeats = await _store.loadRepeats();
     interval = await _store.loadInterval();
+    themeMode = await _store.loadThemeMode();
+    monetEnabled = await _store.loadMonet();
     _devices
       ..clear()
       ..addAll(await _store.loadDevices());
     supported = await _ble.isSupported();
     enabled = await _ble.isEnabled();
+    permissionGranted = await _ble.hasPermissions();
     ready = true;
     notifyListeners();
   }
 
   Future<void> refreshBluetooth() async {
     enabled = await _ble.isEnabled();
+    permissionGranted = await _ble.hasPermissions();
     notifyListeners();
   }
 
@@ -102,18 +114,46 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 发送一帧：申请权限 → 调用原生广播。
+  Future<void> setThemeMode(ThemeMode mode) async {
+    themeMode = mode;
+    await _store.saveThemeMode(mode);
+    notifyListeners();
+  }
+
+  Future<void> setMonet(bool value) async {
+    monetEnabled = value;
+    await _store.saveMonet(value);
+    notifyListeners();
+  }
+
+  /// 申请蓝牙权限；失败时返回 false。
+  Future<bool> requestBleAccess() async {
+    if (!supported) return false;
+    final bool granted = await _ble.ensurePermissions();
+    permissionGranted = granted;
+    if (!granted) {
+      lastError = '需要“附近的设备”权限才能发送控制指令';
+    } else {
+      enabled = await _ble.isEnabled();
+    }
+    notifyListeners();
+    return granted;
+  }
+
+  /// 发送一帧：确保权限 → 调用原生广播。
   Future<bool> send(Uint8List frame, {String? action}) async {
     if (!supported) {
       lastError = '这台设备的蓝牙不支持 BLE 外设广播';
       notifyListeners();
       return false;
     }
-    final bool granted = await _ble.ensurePermissions();
-    if (!granted) {
-      lastError = '缺少蓝牙广播权限';
-      notifyListeners();
-      return false;
+    if (!permissionGranted) {
+      final bool granted = await requestBleAccess();
+      if (!granted) {
+        lastError = '需要“附近的设备”权限才能发送指令';
+        notifyListeners();
+        return false;
+      }
     }
     if (!await _ble.isEnabled()) {
       enabled = false;
@@ -242,7 +282,7 @@ class AppState extends ChangeNotifier {
         var2: d.address,
         index: index,
       ),
-      action: '场景 $index ${d.name}',
+      action: '场景 ${index + 1} ${d.name}',
     );
     await updateDevice(d);
   }
@@ -263,15 +303,17 @@ class AppState extends ChangeNotifier {
     required int p22,
     required int p23,
   }) async {
-    final Uint8List frame = V3Frame.build(
-      type: type,
-      var1: var1,
-      var2: var2,
-      command: command,
-      p21: p21,
-      p22: p22,
-      p23: p23,
+    await send(
+      V3Frame.build(
+        type: type,
+        var1: var1,
+        var2: var2,
+        command: command,
+        p21: p21,
+        p22: p22,
+        p23: p23,
+      ),
+      action: 'RAW 0x${command.toRadixString(16)}',
     );
-    await send(frame, action: 'RAW 0x${command.toRadixString(16)}');
   }
 }

@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_miuix/miuix.dart';
 
 import '../main.dart' show AppScope;
 import '../models/lamp_device.dart';
 import '../state/app_state.dart';
 import '../widgets/common.dart';
-import 'add_edit_page.dart';
-import 'raw_page.dart';
+import 'add_device_page.dart';
 
 class DevicePage extends StatefulWidget {
-  const DevicePage({super.key, required this.device});
+  const DevicePage({super.key, required this.device, this.autoPair = false});
 
   final LampDevice device;
+  final bool autoPair;
 
   @override
   State<DevicePage> createState() => _DevicePageState();
@@ -21,189 +20,171 @@ class _DevicePageState extends State<DevicePage> {
   late double _brightness = widget.device.brightness.toDouble();
   late double _temp = widget.device.colorTemp.toDouble();
 
-  static const List<Color> _swatches = <Color>[
+  static const List<Color> _palette = <Color>[
     Color(0xFFFFD9A0),
     Color(0xFFFFB4A2),
     Color(0xFFFF8A80),
-    Color(0xFFE57373),
+    Color(0xFFF06292),
     Color(0xFFBA68C8),
     Color(0xFF7986CB),
-    Color(0xFF4FC3F7),
+    Color(0xFF64B5F6),
+    Color(0xFF4DD0E1),
     Color(0xFF4DB6AC),
     Color(0xFF81C784),
-    Color(0xFFFFF59D),
+    Color(0xFFDCE775),
+    Color(0xFFFFFFFF),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.autoPair) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _openPairing());
+    }
+  }
+
+  LampDevice get device => widget.device;
 
   @override
   Widget build(BuildContext context) {
     final AppState state = AppScope.of(context);
-    final LampDevice d = widget.device;
-    final MiuixColors c = MiuixTheme.of(context).colors;
-    final MiuixTextStyles t = MiuixTheme.of(context).textStyles;
-    return MiuixScaffold(
-      topBar: MiuixSmallTopAppBar(
-        title: d.name,
-        subtitle: d.subtitle,
-        navigationIcon: MiuixIconButton(
-          onPressed: () => Navigator.of(context).maybePop(),
-          child: MiuixIcon(icon: Icons.arrow_back, tint: c.onBackground),
+    final ColorScheme c = Theme.of(context).colorScheme;
+    final TextTheme t = Theme.of(context).textTheme;
+    return Scaffold(
+      appBar: AppBar(
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(device.name),
+            Text(
+              device.paired ? '已配对 · ${device.typeLabel}' : '未配对 · ${device.typeLabel}',
+              style: t.bodySmall?.copyWith(color: c.onSurfaceVariant),
+            ),
+          ],
         ),
         actions: <Widget>[
-          MiuixIconButton(
-            onPressed: () => _edit(context),
-            child: MiuixIcon(icon: Icons.edit_outlined, tint: c.onBackground),
+          PopupMenuButton<String>(
+            onSelected: (String value) => _onMenu(context, state, value),
+            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+              const PopupMenuItem<String>(value: 'edit', child: Text('编辑设备')),
+              if (device.paired)
+                const PopupMenuItem<String>(value: 'unpair', child: Text('解除配对')),
+              const PopupMenuItem<String>(value: 'delete', child: Text('删除设备')),
+            ],
           ),
         ],
       ),
-      content: (EdgeInsets padding) => ListView(
-        padding: padding.copyWith(top: 6, bottom: 40),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
         children: <Widget>[
-          _PowerCard(device: d, state: state),
+          _PowerButton(device: device, state: state, onTap: () => _toggle(state)),
+          if (!device.paired)
+            Padding(
+              padding: const EdgeInsets.only(top: 4, bottom: 14),
+              child: _SetupCard(onPair: _openPairing),
+            ),
           SectionCard(
-            title: '亮度与色温',
+            title: '亮度',
+            child: Row(
+              children: <Widget>[
+                Icon(Icons.brightness_low, color: c.onSurfaceVariant),
+                Expanded(
+                  child: Slider(
+                    value: _brightness,
+                    min: 1,
+                    max: 100,
+                    divisions: 99,
+                    label: '${_brightness.round()}%',
+                    onChanged: device.paired
+                        ? (double v) => setState(() => _brightness = v)
+                        : null,
+                    onChangeEnd: (double v) => state.setBrightness(device, v.round()),
+                  ),
+                ),
+                Icon(Icons.brightness_high, color: c.onSurfaceVariant),
+              ],
+            ),
+          ),
+          SectionCard(
+            title: '色温',
             child: Column(
               children: <Widget>[
-                SliderRow(
-                  title: '亮度',
-                  value: _brightness,
-                  min: 1,
-                  max: 100,
-                  suffix: '%',
-                  onChanged: (double v) => setState(() => _brightness = v),
-                  onChangeEnd: (double v) => state.setBrightness(d, v.round()),
+                Container(
+                  height: 10,
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(6),
+                    gradient: const LinearGradient(
+                      colors: <Color>[Color(0xFFFFE0B2), Color(0xFFFFFDE7), Color(0xFFE3F2FD)],
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 8),
-                SliderRow(
-                  title: '色温',
+                Slider(
                   value: _temp,
                   min: 0,
                   max: 100,
-                  onChanged: (double v) => setState(() => _temp = v),
-                  onChangeEnd: (double v) => state.setColorTemp(d, v.round()),
+                  divisions: 100,
+                  label: _temp < 33 ? '暖光' : (_temp < 66 ? '中性' : '冷光'),
+                  onChanged: device.paired
+                      ? (double v) => setState(() => _temp = v)
+                      : null,
+                  onChangeEnd: (double v) => state.setColorTemp(device, v.round()),
                 ),
               ],
             ),
           ),
           SectionCard(
             title: '颜色',
-            trailing: MiuixText(
-              '#${d.red.toRadixString(16).padLeft(2, '0')}'
-              '${d.green.toRadixString(16).padLeft(2, '0')}'
-              '${d.blue.toRadixString(16).padLeft(2, '0')}',
-              style: t.footnote1,
-              color: c.onSurfaceVariantSummary,
+            trailing: TextButton(
+              onPressed: device.paired ? () => _pickColor(state) : null,
+              child: const Text('自定义'),
             ),
             child: Wrap(
               spacing: 12,
               runSpacing: 12,
-              children: _swatches.map((Color color) {
-                final int cr = (color.r * 255).round();
-                final int cg = (color.g * 255).round();
-                final int cb = (color.b * 255).round();
-                final bool selected =
-                    cr == d.red && cg == d.green && cb == d.blue;
-                return GestureDetector(
-                  onTap: () => state.setRgb(d, cr, cg, cb),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    width: 46,
-                    height: 46,
-                    decoration: BoxDecoration(
-                      color: color,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: selected ? c.onSurface : Colors.transparent,
-                        width: 2.4,
-                      ),
+              children: <Widget>[
+                for (final Color color in _palette)
+                  _Swatch(
+                    color: color,
+                    selected: _isSelected(color),
+                    onTap: () => state.setRgb(
+                      device,
+                      (color.r * 255).round(),
+                      (color.g * 255).round(),
+                      (color.b * 255).round(),
                     ),
-                    child: selected
-                        ? const MiuixIcon(icon: Icons.check, size: 20, tint: Colors.black54)
-                        : null,
                   ),
-                );
-              }).toList(),
+              ],
             ),
           ),
           SectionCard(
             title: '场景',
+            subtitle: '场景编号由灯具固件定义',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Wrap(
                   spacing: 10,
                   runSpacing: 10,
-                  children: List<Widget>.generate(4, (int i) {
-                    final bool selected = d.scene == i;
-                    return _SceneChip(
-                      label: '场景 ${i + 1}',
-                      selected: selected,
-                      onTap: () => state.sceneSwitch(d, i),
-                    );
-                  }),
-                ),
-                const SizedBox(height: 14),
-                Row(
                   children: <Widget>[
-                    Expanded(
-                      child: MiuixButton(
-                        onPressed: () => state.sceneOn(d),
-                        child: const MiuixText('场景开'),
+                    for (int i = 0; i < 4; i++)
+                      ChoiceChip(
+                        selected: device.scene == i,
+                        onSelected: device.paired
+                            ? (_) => state.sceneSwitch(device, i)
+                            : null,
+                        label: Text('场景 ${i + 1}'),
+                        showCheckmark: false,
                       ),
+                    ActionChip(
+                      onPressed: device.paired ? () => state.sceneOn(device) : null,
+                      avatar: const Icon(Icons.auto_awesome, size: 18),
+                      label: const Text('场景开'),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: MiuixButton(
-                        onPressed: () => state.nightLight(d),
-                        child: const MiuixText('夜灯'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          SectionCard(
-            title: '配对',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                MiuixText(
-                  '给灯具断电再上电，在 5 秒内点击“配对”。灯闪烁或蜂鸣即表示配对成功。',
-                  style: t.footnote1,
-                  color: c.onSurfaceVariantSummary,
-                ),
-                const SizedBox(height: 14),
-                Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: MiuixButton(
-                        onPressed: () => state.pair(d),
-                        colors: MiuixButtonDefaults.buttonColorsPrimary(context),
-                        child: const MiuixText('配对'),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: MiuixButton(
-                        onPressed: () => state.unpair(d),
-                        child: const MiuixText('解绑'),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: <Widget>[
-                    MiuixIcon(
-                      icon: d.paired ? Icons.check_circle_outline : Icons.info_outline,
-                      size: 15,
-                      tint: d.paired ? c.primary : c.onSurfaceVariantSummary,
-                    ),
-                    const SizedBox(width: 6),
-                    MiuixText(
-                      d.paired ? '当前状态：已配对' : '当前状态：未配对',
-                      style: t.footnote1,
-                      color: d.paired ? c.primary : c.onSurfaceVariantSummary,
+                    ActionChip(
+                      onPressed: device.paired ? () => state.nightLight(device) : null,
+                      avatar: const Icon(Icons.nightlight_round, size: 18),
+                      label: const Text('夜灯'),
                     ),
                   ],
                 ),
@@ -212,46 +193,343 @@ class _DevicePageState extends State<DevicePage> {
           ),
           SectionCard(
             title: '设备信息',
-            trailing: MiuixTextButton('编辑', onPressed: () => _edit(context)),
             child: Column(
               children: <Widget>[
-                _InfoRow(label: '类型', value: '${d.typeLabel}  (0x${d.type.toRadixString(16)})'),
-                _InfoRow(label: '地址', value: '${d.address}'),
-                _InfoRow(label: '通道', value: '${d.channel}'),
-                _InfoRow(
+                InfoRow(label: '类型', value: device.typeLabel),
+                InfoRow(label: '地址', value: '${device.address}'),
+                InfoRow(label: '通道', value: '${device.channel}'),
+                InfoRow(
                   label: 'var1',
-                  value: '0x${state.var1For(d).toRadixString(16).toUpperCase()}',
+                  value: '0x${state.var1For(device).toRadixString(16).toUpperCase()}',
+                  last: true,
                 ),
-                _InfoRow(label: '配对', value: d.paired ? '是' : '否', last: true),
               ],
             ),
           ),
-          MiuixButton(
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => RawPage(device: d)),
-              );
-            },
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                const MiuixIcon(icon: Icons.terminal, size: 18),
-                const SizedBox(width: 8),
-                const MiuixText('RAW 调试'),
-              ],
+          if (state.lastError != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                state.lastError!,
+                textAlign: TextAlign.center,
+                style: t.bodySmall?.copyWith(color: c.error),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  bool _isSelected(Color color) {
+    return (color.r * 255).round() == device.red &&
+        (color.g * 255).round() == device.green &&
+        (color.b * 255).round() == device.blue;
+  }
+
+  Future<void> _toggle(AppState state) async {
+    if (!device.paired) {
+      await _openPairing();
+      return;
+    }
+    final bool ok = await state.setPower(device, !device.power);
+    if (!ok && mounted) _toast(state.lastError ?? '发送失败');
+  }
+
+  Future<void> _openPairing() async {
+    final AppState state = AppScope.of(context);
+    final bool? paired = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (BuildContext ctx) => _PairingSheet(device: device, state: state),
+    );
+    if (paired == true && mounted) {
+      setState(() {});
+      _toast('配对完成，试试开关吧');
+    }
+  }
+
+  Future<void> _pickColor(AppState state) async {
+    final HSVColor initial = HSVColor.fromColor(
+      Color.fromARGB(255, device.red, device.green, device.blue),
+    );
+    final Color? picked = await showDialog<Color>(
+      context: context,
+      builder: (BuildContext ctx) => _ColorDialog(initial: initial),
+    );
+    if (picked != null) {
+      await state.setRgb(
+        device,
+        (picked.r * 255).round(),
+        (picked.g * 255).round(),
+        (picked.b * 255).round(),
+      );
+    }
+  }
+
+  Future<void> _onMenu(BuildContext context, AppState state, String value) async {
+    switch (value) {
+      case 'edit':
+        final LampDevice? updated = await Navigator.of(context).push<LampDevice>(
+          MaterialPageRoute<LampDevice>(builder: (_) => AddDevicePage(device: device)),
+        );
+        if (updated != null) {
+          await state.updateDevice(updated);
+          if (mounted) setState(() {});
+        }
+        break;
+      case 'unpair':
+        final bool ok = await state.unpair(device);
+        if (mounted) {
+          setState(() {});
+          _toast(ok ? '已发送解绑指令' : (state.lastError ?? '发送失败'));
+        }
+        break;
+      case 'delete':
+        final bool? sure = await showDialog<bool>(
+          context: context,
+          builder: (BuildContext ctx) => AlertDialog(
+            title: const Text('删除设备'),
+            content: Text('确定移除「${device.name}」吗？'),
+            actions: <Widget>[
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+              FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('删除')),
+            ],
+          ),
+        );
+        if (sure == true) {
+          await state.removeDevice(device.id);
+          if (context.mounted) Navigator.of(context).maybePop();
+        }
+        break;
+    }
+  }
+
+  void _toast(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+}
+
+class _PowerButton extends StatelessWidget {
+  const _PowerButton({required this.device, required this.state, required this.onTap});
+
+  final LampDevice device;
+  final AppState state;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme c = Theme.of(context).colorScheme;
+    final TextTheme t = Theme.of(context).textTheme;
+    final bool on = device.power;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 18),
+      child: Column(
+        children: <Widget>[
+          Semantics(
+            button: true,
+            label: on ? '关闭' : '开启',
+            child: GestureDetector(
+              onTap: onTap,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOutCubic,
+                width: 152,
+                height: 152,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: on ? c.primary : c.surfaceContainerHighest,
+                  boxShadow: <BoxShadow>[
+                    BoxShadow(
+                      color: (on ? c.primary : Colors.black).withValues(alpha: on ? 0.35 : 0.06),
+                      blurRadius: on ? 32 : 12,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  Icons.power_settings_new,
+                  size: 58,
+                  color: on ? c.onPrimary : c.onSurfaceVariant,
+                ),
+              ),
             ),
           ),
-          const SizedBox(height: 10),
-          MiuixButton(
-            onPressed: () => _delete(context, state, d),
-            child: MiuixText('删除设备', color: c.error),
+          const SizedBox(height: 14),
+          Text(
+            on ? '已开启' : '已关闭',
+            style: t.titleMedium?.copyWith(fontWeight: FontWeight.w700),
           ),
-          if (state.lastError != null) ...<Widget>[
-            const SizedBox(height: 14),
-            MiuixText(
-              state.lastError!,
-              style: t.footnote1,
-              color: c.error,
+          const SizedBox(height: 2),
+          Text(
+            device.paired ? '轻触切换' : '配对后即可控制',
+            style: t.bodySmall?.copyWith(color: c.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SetupCard extends StatelessWidget {
+  const _SetupCard({required this.onPair});
+
+  final Future<void> Function() onPair;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme c = Theme.of(context).colorScheme;
+    final TextTheme t = Theme.of(context).textTheme;
+    return Card(
+      color: c.tertiaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+        child: Row(
+          children: <Widget>[
+            Icon(Icons.link, color: c.onTertiaryContainer),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                '还差一步：完成配对',
+                style: t.titleSmall?.copyWith(color: c.onTertiaryContainer),
+              ),
+            ),
+            FilledButton.tonal(onPressed: onPair, child: const Text('去配对')),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Swatch extends StatelessWidget {
+  const _Swatch({required this.color, required this.selected, required this.onTap});
+
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme c = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        width: 46,
+        height: 46,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: selected ? c.onSurface : c.outlineVariant,
+            width: selected ? 3 : 1,
+          ),
+        ),
+        child: selected
+            ? Icon(
+                Icons.check,
+                size: 20,
+                color: color.computeLuminance() > 0.6 ? Colors.black54 : Colors.white,
+              )
+            : null,
+      ),
+    );
+  }
+}
+
+class _PairingSheet extends StatefulWidget {
+  const _PairingSheet({required this.device, required this.state});
+
+  final LampDevice device;
+  final AppState state;
+
+  @override
+  State<_PairingSheet> createState() => _PairingSheetState();
+}
+
+class _PairingSheetState extends State<_PairingSheet> {
+  bool _busy = false;
+  bool _sent = false;
+  String? _error;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme c = Theme.of(context).colorScheme;
+    final TextTheme t = Theme.of(context).textTheme;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(24, 4, 24, 24 + MediaQuery.viewInsetsOf(context).bottom),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Center(
+            child: Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(color: c.primaryContainer, shape: BoxShape.circle),
+              child: Icon(Icons.link, size: 34, color: c.onPrimaryContainer),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            '配对 ${widget.device.name}',
+            textAlign: TextAlign.center,
+            style: t.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '1. 给灯具断电，再重新上电\n'
+            '2. 上电后 5 秒内点击下面的按钮\n'
+            '3. 灯闪烁或蜂鸣即表示成功',
+            textAlign: TextAlign.center,
+            style: t.bodyMedium?.copyWith(color: c.onSurfaceVariant, height: 1.6),
+          ),
+          const SizedBox(height: 20),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Text(_error!, textAlign: TextAlign.center, style: TextStyle(color: c.error)),
+            ),
+          if (!_sent)
+            FilledButton.icon(
+              onPressed: _busy ? null : _pair,
+              icon: _busy
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.send),
+              label: Text(_busy ? '正在发送…' : '我已上电，开始配对'),
+            )
+          else ...<Widget>[
+            Text(
+              '指令已发送。灯有反应吗？',
+              textAlign: TextAlign.center,
+              style: t.titleSmall?.copyWith(color: c.primary),
+            ),
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('有反应，完成配对'),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton(
+              onPressed: () => setState(() {
+                _sent = false;
+                _error = null;
+              }),
+              child: const Text('没有反应，重试'),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '仍无反应？请确认灯具支持该协议、手机蓝牙已开启，'
+              '并尽量靠近灯具；被其他手机占用时先用原 App 解绑。',
+              textAlign: TextAlign.center,
+              style: t.bodySmall?.copyWith(color: c.onSurfaceVariant),
             ),
           ],
         ],
@@ -259,163 +537,75 @@ class _DevicePageState extends State<DevicePage> {
     );
   }
 
-  Future<void> _edit(BuildContext context) async {
-    final AppState state = AppScope.of(context);
-    final LampDevice? updated = await Navigator.of(context).push<LampDevice>(
-      MaterialPageRoute<LampDevice>(
-        builder: (_) => AddEditPage(device: widget.device),
-      ),
-    );
-    if (updated != null) {
-      await state.updateDevice(updated);
-      if (mounted) setState(() {});
-    }
+  Future<void> _pair() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final bool ok = await widget.state.pair(widget.device);
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _sent = ok;
+      _error = ok ? null : (widget.state.lastError ?? '发送失败');
+    });
   }
+}
 
-  Future<void> _delete(BuildContext context, AppState state, LampDevice d) async {
-    final bool? ok = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext ctx) => AlertDialog(
-        title: const Text('删除设备'),
-        content: Text('确定从列表中移除「${d.name}」吗？'),
-        actions: <Widget>[
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('取消')),
-          TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('删除')),
+class _ColorDialog extends StatefulWidget {
+  const _ColorDialog({required this.initial});
+
+  final HSVColor initial;
+
+  @override
+  State<_ColorDialog> createState() => _ColorDialogState();
+}
+
+class _ColorDialogState extends State<_ColorDialog> {
+  late HSVColor _hsv = widget.initial;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color color = _hsv.toColor();
+    return AlertDialog(
+      title: const Text('自定义颜色'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Container(
+            height: 56,
+            decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(16)),
+          ),
+          const SizedBox(height: 12),
+          _label('色相'),
+          Slider(
+            value: _hsv.hue,
+            min: 0,
+            max: 360,
+            onChanged: (double v) => setState(() => _hsv = _hsv.withHue(v)),
+          ),
+          _label('饱和度'),
+          Slider(
+            value: _hsv.saturation,
+            onChanged: (double v) => setState(() => _hsv = _hsv.withSaturation(v)),
+          ),
+          _label('明度'),
+          Slider(
+            value: _hsv.value,
+            min: 0.1,
+            onChanged: (double v) => setState(() => _hsv = _hsv.withValue(v)),
+          ),
         ],
       ),
-    );
-    if (ok == true) {
-      await state.removeDevice(d.id);
-      if (context.mounted) Navigator.of(context).maybePop();
-    }
-  }
-}
-
-class _PowerCard extends StatelessWidget {
-  const _PowerCard({required this.device, required this.state});
-
-  final LampDevice device;
-  final AppState state;
-
-  @override
-  Widget build(BuildContext context) {
-    final MiuixColors c = MiuixTheme.of(context).colors;
-    final MiuixTextStyles t = MiuixTheme.of(context).textStyles;
-    final bool on = device.power;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: MiuixCard(
-        insideMargin: EdgeInsets.zero,
-        colors: MiuixCardColors(
-          color: on ? c.primaryContainer : c.surfaceContainer,
-          contentColor: on ? c.onPrimaryContainer : c.onSurfaceContainer,
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 26),
-          child: Column(
-            children: <Widget>[
-              GestureDetector(
-                onTap: device.paired ? () => state.setPower(device, !on) : null,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 260),
-                  curve: Curves.easeOutCubic,
-                  width: 118,
-                  height: 118,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: on
-                          ? <Color>[c.primary, c.primaryVariant]
-                          : <Color>[c.surfaceContainerHigh, c.surfaceContainerHighest],
-                    ),
-                    boxShadow: on
-                        ? <BoxShadow>[
-                            BoxShadow(
-                              color: c.primary.withValues(alpha: 0.32),
-                              blurRadius: 28,
-                              spreadRadius: 2,
-                            ),
-                          ]
-                        : null,
-                  ),
-                  child: MiuixIcon(
-                    icon: Icons.power_settings_new,
-                    size: 46,
-                    tint: on ? c.onPrimary : c.onSurfaceVariantSummary,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              MiuixText(on ? '已开启' : '已关闭', style: t.title4),
-              const SizedBox(height: 4),
-              MiuixText(
-                device.paired ? '轻触圆环切换开关' : '尚未配对，请先完成配对',
-                style: t.footnote1,
-                color: c.onSurfaceVariantSummary,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SceneChip extends StatelessWidget {
-  const _SceneChip({required this.label, required this.selected, required this.onTap});
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final MiuixColors c = MiuixTheme.of(context).colors;
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
-          color: selected ? c.primary : c.surfaceContainerHigh,
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: MiuixText(
-          label,
-          fontSize: 13,
-          color: selected ? c.onPrimary : c.onSurface,
-        ),
-      ),
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.label, required this.value, this.last = false});
-
-  final String label;
-  final String value;
-  final bool last;
-
-  @override
-  Widget build(BuildContext context) {
-    final MiuixColors c = MiuixTheme.of(context).colors;
-    final MiuixTextStyles t = MiuixTheme.of(context).textStyles;
-    return Column(
-      children: <Widget>[
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 9),
-          child: Row(
-            children: <Widget>[
-              Expanded(child: MiuixText(label, style: t.body1, color: c.onSurfaceVariantSummary)),
-              MiuixText(value, style: t.body2),
-            ],
-          ),
-        ),
-        if (!last) Divider(height: 1, color: c.dividerLine),
+      actions: <Widget>[
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+        FilledButton(onPressed: () => Navigator.pop(context, color), child: const Text('应用')),
       ],
     );
   }
+
+  Widget _label(String text) => Align(
+        alignment: Alignment.centerLeft,
+        child: Text(text, style: Theme.of(context).textTheme.bodySmall),
+      );
 }
