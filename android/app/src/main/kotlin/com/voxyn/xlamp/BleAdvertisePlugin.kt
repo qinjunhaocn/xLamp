@@ -7,14 +7,18 @@ import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
 import android.bluetooth.le.BluetoothLeAdvertiser
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.os.ParcelUuid
 import android.util.Log
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * 把 Dart 生成的 31 字节 v3 帧通过 BLE 广播发送出去。
@@ -38,16 +42,8 @@ class BleAdvertisePlugin(private val context: Context) : MethodChannel.MethodCal
         get() = adapter?.bluetoothLeAdvertiser
 
     private var executor: ExecutorService? = null
-
-    private val callback = object : AdvertiseCallback() {
-        override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
-            Log.d(TAG, "advertise started")
-        }
-
-        override fun onStartFailure(errorCode: Int) {
-            Log.w(TAG, "advertise failed: $errorCode")
-        }
-    }
+    private var activeCallback: AdvertiseCallback? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     fun attach(engine: io.flutter.embedding.engine.FlutterEngine) {
         MethodChannel(engine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler(this)
@@ -99,13 +95,11 @@ class BleAdvertisePlugin(private val context: Context) : MethodChannel.MethodCal
             result.error("bluetooth_disabled", "bluetooth is disabled", null)
             return
         }
-        val frame = payload.copyOfRange(5, 31)
-        val data = buildData(frame)
+        val data = buildData(payload.copyOfRange(5, 31))
         if (data == null) {
             result.error("bad_payload", "cannot build advertise data", null)
             return
         }
-        stopInternal()
         val settings = AdvertiseSettings.Builder()
             .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
             .setTimeout(duration)
@@ -114,9 +108,27 @@ class BleAdvertisePlugin(private val context: Context) : MethodChannel.MethodCal
             .build()
         val marker = buildMarker()
 
+        stopInternal()
+        val first = CountDownLatch(1)
+        val errorCode = AtomicInteger(0)
+        val callback = object : AdvertiseCallback() {
+            override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
+                Log.d(TAG, "advertise started")
+                first.countDown()
+            }
+
+            override fun onStartFailure(code: Int) {
+                Log.w(TAG, "advertise failed: $code")
+                errorCode.compareAndSet(0, code)
+                first.countDown()
+            }
+        }
+        activeCallback = callback
+
         val pool = Executors.newSingleThreadExecutor()
         executor = pool
         val slots = arrayOf(data, data)
+        val gap = interval.toLong().coerceIn(100, 2000)
         repeat(repeats.coerceIn(1, 32)) { i ->
             pool.submit {
                 if (pool.isShutdown) return@submit
@@ -126,10 +138,7 @@ class BleAdvertisePlugin(private val context: Context) : MethodChannel.MethodCal
                 } catch (t: Throwable) {
                     Log.w(TAG, "startAdvertising", t)
                 }
-                try {
-                    Thread.sleep(interval.toLong().coerceIn(100, 2000))
-                } catch (_: InterruptedException) {
-                }
+                sleep(gap)
             }
         }
         pool.submit {
@@ -140,10 +149,7 @@ class BleAdvertisePlugin(private val context: Context) : MethodChannel.MethodCal
             } catch (t: Throwable) {
                 Log.w(TAG, "end marker", t)
             }
-            try {
-                Thread.sleep(interval.toLong().coerceIn(100, 2000))
-            } catch (_: InterruptedException) {
-            }
+            sleep(gap)
         }
         pool.submit {
             try {
@@ -152,13 +158,49 @@ class BleAdvertisePlugin(private val context: Context) : MethodChannel.MethodCal
                 Log.w(TAG, "stop", t)
             }
             pool.shutdown()
+            synchronized(this) {
+                if (executor === pool) {
+                    executor = null
+                    activeCallback = null
+                }
+            }
         }
-        result.success(true)
+
+        // 等第一次 startAdvertising 的结果，再回到主线程回复 Dart。
+        Thread {
+            first.await(800, TimeUnit.MILLISECONDS)
+            val code = errorCode.get()
+            mainHandler.post {
+                if (code != 0) {
+                    result.error("advertise_failed", describe(code), code)
+                } else {
+                    result.success(true)
+                }
+            }
+        }.start()
+    }
+
+    private fun describe(code: Int): String = when (code) {
+        AdvertiseCallback.ADVERTISE_FAILED_ALREADY_STARTED -> "广播已在进行中"
+        AdvertiseCallback.ADVERTISE_FAILED_DATA_TOO_LARGE -> "广播数据超过 31 字节"
+        AdvertiseCallback.ADVERTISE_FAILED_FEATURE_UNSUPPORTED -> "系统不支持 BLE 外设广播"
+        AdvertiseCallback.ADVERTISE_FAILED_INTERNAL_ERROR -> "蓝牙广播内部错误"
+        AdvertiseCallback.ADVERTISE_FAILED_TOO_MANY_ADVERTISERS -> "广播实例过多"
+        else -> "广播启动失败（$code）"
+    }
+
+    private fun sleep(ms: Long) {
+        try {
+            Thread.sleep(ms)
+        } catch (_: InterruptedException) {
+        }
     }
 
     private fun stopInternal() {
         val old = executor
         executor = null
+        val cb = activeCallback
+        activeCallback = null
         if (old != null) {
             old.shutdownNow()
             try {
@@ -166,9 +208,11 @@ class BleAdvertisePlugin(private val context: Context) : MethodChannel.MethodCal
             } catch (_: InterruptedException) {
             }
         }
-        try {
-            advertiser?.stopAdvertising(callback)
-        } catch (_: Throwable) {
+        if (cb != null) {
+            try {
+                advertiser?.stopAdvertising(cb)
+            } catch (_: Throwable) {
+            }
         }
     }
 
