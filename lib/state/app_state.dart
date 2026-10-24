@@ -217,33 +217,41 @@ class AppState extends ChangeNotifier {
     return ok;
   }
 
-  Future<void> setBrightness(LampDevice d, int value) async {
-    d.brightness = value;
-    notifyListeners();
+  /// 调光帧同时携带亮度与色温；若灯具当前是关的，先发开关指令再调光，
+  /// 避免“滑到最小后被当成关机，之后怎么调都没反应”。
+  Future<void> _sendDimming(LampDevice d) async {
+    if (!d.power) {
+      final bool on = await send(
+        LampCommands.power(type: d.type, var1: var1For(d), var2: d.address, on: true),
+        action: '开灯 ${d.name}',
+      );
+      if (!on) return;
+      d.power = true;
+      await updateDevice(d);
+    }
     await send(
-      LampCommands.brightness(
+      LampCommands.dimming(
         type: d.type,
         var1: var1For(d),
         var2: d.address,
-        percent: value,
+        brightness: d.brightness / 100.0,
+        temperature: d.colorTemp / 100.0,
       ),
-      action: '亮度 ${d.name}',
+      action: '调光 ${d.name}',
     );
+  }
+
+  Future<void> setBrightness(LampDevice d, int value) async {
+    d.brightness = value.clamp(1, 100);
+    notifyListeners();
+    await _sendDimming(d);
     await updateDevice(d);
   }
 
   Future<void> setColorTemp(LampDevice d, int value) async {
-    d.colorTemp = value;
+    d.colorTemp = value.clamp(0, 100);
     notifyListeners();
-    await send(
-      LampCommands.colorTemp(
-        type: d.type,
-        var1: var1For(d),
-        var2: d.address,
-        percent: value,
-      ),
-      action: '色温 ${d.name}',
-    );
+    await _sendDimming(d);
     await updateDevice(d);
   }
 
@@ -260,6 +268,7 @@ class AppState extends ChangeNotifier {
         r: r,
         g: g,
         b: b,
+        brightness: d.brightness / 100.0,
       ),
       action: '颜色 ${d.name}',
     );

@@ -79,37 +79,59 @@ class LampCommands {
         command: on ? LampOp.on : LampOp.off,
       );
 
-  /// 亮度 1..100，写入参数槽 p22。
-  static Uint8List brightness({
-    required int type,
-    required int var1,
-    required int var2,
-    required int percent,
-  }) =>
-      V3Frame.build(
-        type: type,
-        var1: var1,
-        var2: var2,
-        command: LampOp.dimming,
-        p22: percent.clamp(1, 100),
-      );
+  /// 计算调光帧里的两个通道值：[冷, 暖]。
+  ///
+  /// 完全复刻原 App `Order.colorTemp` 的算法。
+  static List<int> dimmingChannels(double brightness, double temperature) {
+    final double b = brightness.clamp(0.0, 1.0);
+    final double t = temperature.clamp(0.0, 1.0) * 100.0;
+    final double factor = 0.1 + 0.9 * b;
+    final int maxChannel = (255.0 * factor).floor();
+    int cool;
+    int warm;
+    if (t > 50) {
+      cool = maxChannel;
+      warm = (255.0 * factor * (1.0 - (t - 50.0) / 50.0)).floor();
+    } else {
+      cool = (255.0 * factor * (t / 50.0)).floor();
+      warm = maxChannel;
+    }
+    return <int>[cool.clamp(0, 255), warm.clamp(0, 255)];
+  }
 
-  /// 色温 0..100，写入参数槽 p21。
-  static Uint8List colorTemp({
+  /// 亮度 + 色温合并的调光帧（对应原 App 的 Order.colorTemp）。
+  ///
+  /// 原实现把亮度换算成 `factor = 0.1 + 0.9 * brightness`，再按色温在
+  /// 暖/冷两个通道间分配，写入 p22（冷）与 p23（暖）。因此：
+  ///  - 最亮时两个通道都是 255，而不是 100；
+  ///  - 最暗时仍有 10% 的底值，灯具不会把滑到最小当成关机。
+  static Uint8List dimming({
     required int type,
     required int var1,
     required int var2,
-    required int percent,
-  }) =>
-      V3Frame.build(
-        type: type,
-        var1: var1,
-        var2: var2,
-        command: LampOp.temperature,
-        p21: percent.clamp(0, 100),
-      );
+    required double brightness,
+    required double temperature,
+  }) {
+    final List<int> ch = dimmingChannels(brightness, temperature);
+    return V3Frame.build(
+      type: type,
+      var1: var1,
+      var2: var2,
+      command: LampOp.dimming,
+      p22: ch[0],
+      p23: ch[1],
+    );
+  }
+
+  /// 把 0..255 的颜色通道按亮度系数缩放到原 App 的取值。
+  static int scaleChannel(int channel, double brightness) {
+    final double factor = 0.1 + 0.9 * brightness.clamp(0.0, 1.0);
+    return (channel.clamp(0, 255) * factor).floor().clamp(0, 255);
+  }
 
   /// RGB 三通道，写入 p21/p22/p23。
+  ///
+  /// 与原 App 一样按亮度系数缩放，避免切换颜色时亮度跳变。
   static Uint8List rgb({
     required int type,
     required int var1,
@@ -117,16 +139,19 @@ class LampCommands {
     required int r,
     required int g,
     required int b,
-  }) =>
-      V3Frame.build(
-        type: type,
-        var1: var1,
-        var2: var2,
-        command: LampOp.rgbSwitch,
-        p21: r.clamp(0, 255),
-        p22: g.clamp(0, 255),
-        p23: b.clamp(0, 255),
-      );
+    double brightness = 1.0,
+  }) {
+    int scale(int c) => scaleChannel(c, brightness);
+    return V3Frame.build(
+      type: type,
+      var1: var1,
+      var2: var2,
+      command: LampOp.rgbSwitch,
+      p21: scale(r),
+      p22: scale(g),
+      p23: scale(b),
+    );
+  }
 
   static Uint8List rgbPower({
     required int type,
