@@ -15,7 +15,7 @@
 [![dart](https://img.shields.io/badge/Dart-3.13-0175C2?logo=dart&logoColor=white)](https://dart.dev)
 [![material3](https://img.shields.io/badge/Material%203-Monet-6750A4?logo=materialdesign&logoColor=white)](#-界面)
 [![ble](https://img.shields.io/badge/BLE-Advertising-0082FC?logo=bluetooth&logoColor=white)](#-工作原理)
-[![license](https://img.shields.io/badge/license-Personal%20Use-lightgrey)](#-免责声明)
+[![license](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-8A2BE2)](LICENSE)
 
 </div>
 
@@ -305,12 +305,26 @@ xLamp 已按原 App 算法把 100% 映射到通道 `255`。若仍偏暗，通常
 不会。工程内没有任何网络请求代码，设备信息只保存在本机 SharedPreferences。
 </details>
 
+## 📄 许可证
+
+本项目采用 **[PolyForm Noncommercial License 1.0.0](LICENSE)**（源码可见，非 OSI 开源）：
+
+| 用途 | 是否允许 |
+|---|---|
+| 个人使用、学习、研究、实验 | ✅ 免费 |
+| 教学、非营利组织、慈善用途 | ✅ 免费 |
+| 修改、二次开发、再分发 | ✅ 免费，需保留协议原文且衍生作品沿用同一协议 |
+| 公司业务使用、打包售卖、付费服务 | ❌ 需另行取得商业授权 |
+
+完整条款以 [LICENSE](LICENSE) 英文原文为准。如需商业授权，请通过 Issue 联系作者。
+
 ## ⚠️ 免责声明
 
 - 本项目仅用于**学习与研究**蓝牙广播协议，请勿用于商业用途或未授权的设备。
 - 协议细节来自对公开 APK 的静态分析，未包含原 App 的任何代码或资源。
 - 使用本软件造成的设备异常、配对失败等风险由使用者自行承担。
 - 请勿将签名密钥库（`.jks`）或密码提交到仓库。
+- 非商业使用授权见 [LICENSE](LICENSE)；商业用途需获得作者书面许可。
 
 ## 🙏 致谢
 
